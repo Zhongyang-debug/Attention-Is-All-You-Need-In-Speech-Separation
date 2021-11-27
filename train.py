@@ -2,14 +2,7 @@ import argparse
 import torch
 from dataset.data import AudioDataLoader, AudioDataset
 from src.trainer import Trainer
-from model.conv_tasnet import ConvTasNet
-from model.dual_path_rnn import Dual_RNN_model
-from model.dptnet import DPTNet
 from model.sepformer import Sepformer
-from model.sudormrf import SuDORMRF
-from model.galr import GALR
-from model.sandglasset import Sandglasset
-from model.snnet_1 import SN_Net
 import json5
 import numpy as np
 from adamp import AdamP, SGDP
@@ -44,38 +37,7 @@ def main(config):
     data = {"tr_loader": tr_loader, "cv_loader": cv_loader}
 
     # 模型
-    if config["model"]["type"] == "conv_tasnet":
-        model = ConvTasNet(N=config["model"]["conv_tasnet"]["N"],
-                           L=config["model"]["conv_tasnet"]["L"],
-                           B=config["model"]["conv_tasnet"]["B"],
-                           H=config["model"]["conv_tasnet"]["H"],
-                           P=config["model"]["conv_tasnet"]["P"],
-                           X=config["model"]["conv_tasnet"]["X"],
-                           R=config["model"]["conv_tasnet"]["R"],
-                           C=config["model"]["conv_tasnet"]["C"],
-                           norm_type=config["model"]["conv_tasnet"]["norm_type"],  # "gLN", "cLN", "BN"
-                           causal=config["model"]["conv_tasnet"]["causal"],
-                           mask_nonlinear=config["model"]["conv_tasnet"]["mask_nonlinear"])  # "relu", "softmax"
-    elif config["model"]["type"] == "dual_path_rnn":
-        model = Dual_RNN_model(in_channels=config["model"]["dual_path_rnn"]["in_channels"],
-                               out_channels=config["model"]["dual_path_rnn"]["out_channels"],
-                               hidden_channels=config["model"]["dual_path_rnn"]["hidden_channels"],
-                               kernel_size=config["model"]["dual_path_rnn"]["kernel_size"],
-                               rnn_type=config["model"]["dual_path_rnn"]["rnn_type"],
-                               norm=config["model"]["dual_path_rnn"]["norm"],
-                               dropout=config["model"]["dual_path_rnn"]["dropout"],
-                               bidirectional=config["model"]["dual_path_rnn"]["bidirectional"],
-                               num_layers=config["model"]["dual_path_rnn"]["num_layers"],
-                               K=config["model"]["dual_path_rnn"]["K"],
-                               num_spks=config["model"]["dual_path_rnn"]["num_spks"])
-    elif config["model"]["type"] == "dptnet":
-        model = DPTNet(N=config["model"]["dptnet"]["N"],
-                       C=config["model"]["dptnet"]["C"],
-                       L=config["model"]["dptnet"]["L"],
-                       H=config["model"]["dptnet"]["H"],
-                       K=config["model"]["dptnet"]["K"],
-                       B=config["model"]["dptnet"]["B"])
-    elif config["model"]["type"] == "sepformer":
+    if config["model"]["type"] == "sepformer":
         model = Sepformer(N=config["model"]["sepformer"]["N"],
                           C=config["model"]["sepformer"]["C"],
                           L=config["model"]["sepformer"]["L"],
@@ -83,39 +45,6 @@ def main(config):
                           K=config["model"]["sepformer"]["K"],
                           Global_B=config["model"]["sepformer"]["Global_B"],
                           Local_B=config["model"]["sepformer"]["Local_B"])
-    elif config["model"]["type"] == "sudormrf":
-        model = SuDORMRF(out_channels=config["model"]["sudormrf"]["out_channels"],
-                         in_channels=config["model"]["sudormrf"]["in_channels"],
-                         num_blocks=config["model"]["sudormrf"]["num_blocks"],
-                         upsampling_depth=config["model"]["sudormrf"]["upsampling_depth"],
-                         enc_kernel_size=config["model"]["sudormrf"]["enc_kernel_size"],
-                         enc_num_basis=config["model"]["sudormrf"]["enc_num_basis"],
-                         num_sources=config["model"]["sudormrf"]["num_sources"])
-    elif config["model"]["type"] == "galr":
-        model = GALR(in_channels=config["model"]["galr"]["in_channels"],
-                     out_channels=config["model"]["galr"]["out_channels"],
-                     kernel_size=config["model"]["galr"]["kernel_size"],
-                     length=config["model"]["galr"]["length"],
-                     hidden_channels=config["model"]["galr"]["hidden_channels"],
-                     affine=config["model"]["galr"]["affine"],
-                     num_layers=config["model"]["galr"]["num_layers"],
-                     bidirectional=config["model"]["galr"]["bidirectional"],
-                     num_heads=config["model"]["galr"]["num_heads"],
-                     cycle_amount=config["model"]["galr"]["cycle_amount"],
-                     speakers=config["model"]["galr"]["speakers"])
-    elif config["model"]["type"] == "sandglasset":
-        model = Sandglasset(in_channels=config["model"]["sandglasset"]["in_channels"],
-                            out_channels=config["model"]["sandglasset"]["out_channels"],
-                            kernel_size=config["model"]["galr"]["kernel_size"],
-                            length=config["model"]["sandglasset"]["length"],
-                            hidden_channels=config["model"]["sandglasset"]["hidden_channels"],
-                            num_layers=config["model"]["sandglasset"]["num_layers"],
-                            bidirectional=config["model"]["sandglasset"]["bidirectional"],
-                            num_heads=config["model"]["sandglasset"]["num_heads"],
-                            cycle_amount=config["model"]["sandglasset"]["cycle_amount"],
-                            speakers=config["model"]["sandglasset"]["speakers"])
-    elif config["model"]["type"] == "snnet":
-        model = SN_Net()
     else:
         print("No loaded model!")
 
