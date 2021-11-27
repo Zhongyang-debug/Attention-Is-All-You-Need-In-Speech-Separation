@@ -4,13 +4,7 @@ import numpy as np
 import torch
 from dataset.data import AudioDataLoader, AudioDataset
 from src.pit_criterion import cal_loss
-from model.conv_tasnet import ConvTasNet
-from model.dual_path_rnn import Dual_RNN_model
-from model.dptnet import DPTNet
 from model.sepformer import Sepformer
-from model.sudormrf import SuDORMRF
-from model.galr import GALR
-from model.sandglasset import Sandglasset
 from src.utils import remove_pad
 import json5
 
@@ -101,20 +95,8 @@ def main(config):
     total_cnt = 0
 
     # 加载模型
-    if config["model"] == "conv_tasnet":
-        model = ConvTasNet.load_model(config["model_path"])
-    elif config["model"] == "dual_path_rnn":
-        model = Dual_RNN_model.load_model(config["model_path"])
-    elif config["model"] == "dptnet":
-        model = DPTNet.load_model(config["model_path"])
-    elif config["model"] == "sepformer":
+    if config["model"] == "sepformer":
         model = Sepformer.load_model(config["model_path"])
-    elif config["model"] == "sudormrf":
-        model = SuDORMRF.load_model(config["model_path"])
-    elif config["model"] == "galr":
-        model = GALR.load_model(config["model_path"])
-    elif config["model"] == "sandglasset":
-        model = Sandglasset.load_model(config["model_path"])
     else:
         print("No loaded model!")
 
