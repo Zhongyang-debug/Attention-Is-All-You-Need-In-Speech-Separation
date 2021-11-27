@@ -1,0 +1,17 @@
+{
+  "model_path": "./checkpoint/final.path.tar",
+
+  "mix_dir": "dataset/min/tt/mix",
+
+  "mix_json": "dataset/json/tt/mix.json",
+
+  "out_dir": "./result",
+
+  "model": "sandglasset",
+
+  "use_cuda": false,
+
+  "sample_rate": 8000,
+
+  "batch_size": 1,
+}

@@ -1,0 +1,21 @@
+{
+  "model": "sandglasset",
+
+  "model_path": "./checkpoint/final.path.tar",
+
+  "evaluate_dataset":
+  {
+    "data_dir": "./dataset/json/tt",
+
+    "batch_size": 1,
+
+    "sample_rate": 8000,
+
+    "segment": -1,
+  },
+
+  "cal_sdr": true,
+
+
+  "use_cuda": false,
+}

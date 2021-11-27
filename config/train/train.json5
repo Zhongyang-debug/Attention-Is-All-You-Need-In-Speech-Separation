@@ -1,0 +1,205 @@
+{
+  "seed": 0,
+
+  "train_dataset":
+  {
+    "train_dir": "./dataset/json/tr",
+    "batch_size": 1,
+    "sample_rate": 8000,
+    "segment": -1,
+  },
+
+  "validation_dataset":
+  {
+    "validation_dir": "./dataset/json/cv",
+    "batch_size": 1,
+    "sample_rate": 8000,
+    "segment": -1,
+    "cv_max_len": 8,
+  },
+
+  "train_loader":
+  {
+   "batch_size": 1,
+   "shuffle": true,
+   "num_workers": 0,
+  },
+
+  "validation_loader":
+  {
+    "batch_size": 1,
+    "shuffle": true,
+    "num_workers": 0,
+  },
+
+  "model":
+  {
+    "type": "sepformer",
+
+    "tasnet":
+    {
+      "N": 256,
+      "L": 20,
+      "B": 256,
+      "H": 512,
+      "P": 3,
+      "R": 4,
+      "X": 8,
+      "C": 2,
+      "causal": "0",
+    },
+
+    "conv_tasnet":
+    {
+      "N": 256,
+      "L": 20,
+      "B": 256,
+      "H": 512,
+      "P": 3,
+      "X": 8,
+      "R": 4,
+      "C": 2,
+      "norm_type": "gLN",
+      "causal": "0",
+      "mask_nonlinear": "relu",
+    },
+
+    "dual_path_rnn":
+    {
+      "in_channels": 256,
+      "out_channels": 64,
+      "hidden_channels": 128,
+      "kernel_size": 16,
+      "rnn_type": "LSTM",
+      "norm": "ln",
+      "dropout": 0,
+      "bidirectional":  true,
+      "num_layers": 6,
+      "K": 100,
+      "num_spks": 2,
+    },
+
+    "dptnet":
+    {
+      "N": 64,
+      "C": 2,
+      "L": 4,
+      "H": 4,
+      "K": 250,
+      "B": 6,
+    },
+
+    "sepformer":
+    {
+      "N": 256,
+      "C": 2,
+      "L": 16,
+      "H": 8,
+      "K": 250,
+      "Global_B": 2,
+      "Local_B": 8,
+    },
+
+    "sudormrf":
+    {
+      "out_channels": 128,
+      "in_channels": 512,
+      "num_blocks": 16,
+      "upsampling_depth": 4,
+      "enc_kernel_size": 21,
+      "enc_num_basis": 512,
+      "num_sources": 2
+    },
+
+    "galr":
+    {
+      "in_channels": 128,
+      "out_channels": 64,
+      "kernel_size": 4,
+      "length": 200,
+      "hidden_channels": 128,
+      "affine": 8,
+      "num_layers": 1,
+      "bidirectional": true,
+      "num_heads": 8,
+      "cycle_amount": 6,
+      "speakers": 2
+    },
+
+    "sandglasset":
+    {
+      "in_channels": 64,
+      "out_channels": 64,
+      "kernel_size": 16,
+      "length": 256,
+      "hidden_channels": 128,
+      "num_layers": 1,
+      "bidirectional": true,
+      "num_heads": 8,
+      "cycle_amount": 4,
+      "speakers": 2
+    },
+
+    "snnet":
+    {
+
+    }
+  },
+
+  "train":
+  {
+    "use_cuda": false,
+    "epochs": 100,
+    "half_lr": true,
+    "early_stop": true,
+    "max_norm": 5,
+  },
+
+  "optimizer":
+  {
+    "type": "adamp",
+
+    "sgd":
+    {
+      "lr": 0.125,
+      "momentum": 0.0,
+      "l2": 0.0,
+    },
+
+    "adam":
+    {
+      "lr": 0.0125,
+      "beta1": 0.9,
+      "beta2": 0.999
+    },
+
+    "sgdp":
+    {
+      "lr":0.1,
+      "weight_decay":1e-5,
+      "momentum":0.9,
+      "nesterov":true
+    },
+
+    "adamp":
+    {
+      "lr":0.001,
+      "beta1":0.9,
+      "beta2":0.999,
+      "weight_decay":1e-2,
+    }
+  },
+
+  "save_load":
+  {
+    "save_folder": "./checkpoint/",
+    "checkpoint": true,
+    "continue_from": "",
+    "model_path": "final.path.tar",
+  },
+
+  "logging":
+  {
+    "print_freq": 1,
+  }
+}
