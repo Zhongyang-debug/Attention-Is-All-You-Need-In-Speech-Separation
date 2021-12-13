@@ -36,15 +36,15 @@
   {
     "type": "sepformer",
 
-    "sudormrf":
+    "sepformer":
     {
-      "out_channels": 128,
-      "in_channels": 512,
-      "num_blocks": 16,
-      "upsampling_depth": 4,
-      "enc_kernel_size": 21,
-      "enc_num_basis": 512,
-      "num_sources": 2
+      "N": 256,
+      "C": 2,
+      "L": 16,
+      "H": 8,
+      "K": 250,
+      "Global_B": 2,
+      "Local_B": 8,
     },
   },
 
