@@ -164,7 +164,6 @@ class DPTBlock(nn.Module):
             row_z3 = self.intra_transformer[i](row_z1.permute(1, 0, 2)).permute(1, 0, 2)
 
         row_f = row_z3 + row_z
-
         row_output = row_f.reshape(B, P, K, N).permute(0, 3, 2, 1)
 
         # inter DPT
