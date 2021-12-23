@@ -58,31 +58,6 @@ class Decoder(nn.Module):
         return x
 
 
-class PositionalEncoding(nn.Module):
-
-    def __init__(self, d_model, dropout, max_len=5000):
-
-        super(PositionalEncoding, self).__init__()
-
-        self.dropout = nn.Dropout(p=dropout)
-
-        # Compute the positional encodings once in log space.
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model))
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0)
-
-        self.register_buffer('pe', pe)
-
-    def forward(self, x):
-
-        x = x + Variable(self.pe[:, :x.size(1)], requires_grad=False)
-
-        return self.dropout(x)
-
-
 class TransformerEncoderLayer(Module):
     """
         TransformerEncoderLayer is made up of self-attn and feedforward network.
@@ -109,8 +84,6 @@ class TransformerEncoderLayer(Module):
 
         super(TransformerEncoderLayer, self).__init__()
 
-        self.PositionalEncoding = PositionalEncoding(d_model, dropout, max_len=32000)
-
         self.LayerNorm1 = nn.LayerNorm(normalized_shape=d_model)
 
         self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout)
@@ -121,11 +94,7 @@ class TransformerEncoderLayer(Module):
                                          nn.ReLU(),
                                          nn.Linear(d_model*2*2, d_model))
 
-    def forward(self, z):
-
-        e = self.PositionalEncoding(z)  # 位置编码
-
-        z1 = z + e
+    def forward(self, z1):
 
         ln_z1 = self.LayerNorm1(z1)
 
@@ -136,6 +105,31 @@ class TransformerEncoderLayer(Module):
         return z3
 
 
+class PositionalEncoding(nn.Module):
+
+    def __init__(self, d_model, dropout, max_len=5000):
+
+        super(PositionalEncoding, self).__init__()
+
+        self.dropout = nn.Dropout(p=dropout)
+
+        # Compute the positional encodings once in log space.
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)
+
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+
+        x = x + Variable(self.pe[:, :x.size(1)], requires_grad=False)
+
+        return self.dropout(x)
+
+
 class DPTBlock(nn.Module):
 
     def __init__(self, input_size, nHead, Local_B):
@@ -144,45 +138,46 @@ class DPTBlock(nn.Module):
 
         self.Local_B = Local_B
 
+        self.intra_PositionalEncoding = PositionalEncoding(d_model=input_size, dropout=0, max_len=5000)
         self.intra_transformer = nn.ModuleList([])
-
         for i in range(self.Local_B):
             self.intra_transformer.append(TransformerEncoderLayer(d_model=input_size,
                                                                   nhead=nHead,
                                                                   dropout=0))
 
+        self.inter_PositionalEncoding = PositionalEncoding(d_model=input_size, dropout=0, max_len=5000)
         self.inter_transformer = nn.ModuleList([])
-
         for i in range(self.Local_B):
             self.inter_transformer.append(TransformerEncoderLayer(d_model=input_size,
                                                                   nhead=nHead,
                                                                   dropout=0))
 
-    def forward(self, x):
+    def forward(self, z):
 
-        B, N, K, P = x.shape  # torch.Size([1, 64, 250, 130])
+        B, N, K, P = z.shape  # torch.Size([1, 64, 250, 130])
 
         # intra DPT
-        row_input = x.permute(0, 3, 2, 1).reshape(B * P, K, N)
+        row_z = z.permute(0, 3, 2, 1).reshape(B*P, K, N)
+        row_z1 = row_z + self.intra_PositionalEncoding(row_z)
 
         for i in range(self.Local_B):
-            row_output = self.intra_transformer[i](row_input.permute(1, 0, 2)).permute(1, 0, 2)
+            row_z3 = self.intra_transformer[i](row_z1.permute(1, 0, 2)).permute(1, 0, 2)
 
-        row_output = row_output.reshape(B, P, K, N).permute(0, 3, 2, 1)
+        row_f = row_z3 + row_z
 
-        output = x + row_output
+        row_output = row_f.reshape(B, P, K, N).permute(0, 3, 2, 1)
 
         # inter DPT
-        col_input = output.permute(0, 2, 3, 1).reshape(B*K, P, N)
+        col_z = row_output.permute(0, 2, 3, 1).reshape(B*K, P, N)
+        col_z1 = col_z + self.inter_PositionalEncoding(col_z)
 
         for i in range(self.Local_B):
-            col_output = self.inter_transformer[i](col_input.permute(1, 0, 2)).permute(1, 0, 2)
+            col_z3 = self.inter_transformer[i](col_z1.permute(1, 0, 2)).permute(1, 0, 2)
 
-        col_output = col_output.reshape(B, K, P, N).permute(0, 3, 1, 2)
+        col_f = col_z3 + col_z
+        col_output = col_f.reshape(B, K, P, N).permute(0, 3, 1, 2)
 
-        output = output + col_output
-
-        return output
+        return col_output
 
 
 class Separator(nn.Module):
@@ -207,15 +202,12 @@ class Separator(nn.Module):
         self.PReLU = nn.PReLU()
         self.Linear2 = nn.Linear(in_features=self.N, out_features=self.N*2, bias=None)
 
-        # self.output = nn.Sequential(nn.Conv1d(N, N, 1), nn.Tanh())
-        # self.output_gate = nn.Sequential(nn.Conv1d(N, N, 1), nn.Sigmoid())
-
-        self.FeedForward1 = nn.Sequential(nn.Linear(self.N, self.N*4),
+        self.FeedForward1 = nn.Sequential(nn.Linear(self.N, self.N*2*2),
                                           nn.ReLU(),
-                                          nn.Linear(self.N*4, self.N))
-        self.FeedForward2 = nn.Sequential(nn.Linear(self.N, self.N*4),
+                                          nn.Linear(self.N*2*2, self.N))
+        self.FeedForward2 = nn.Sequential(nn.Linear(self.N, self.N*2*2),
                                           nn.ReLU(),
-                                          nn.Linear(self.N*4, self.N))
+                                          nn.Linear(self.N*2*2, self.N))
         self.ReLU = nn.ReLU()
 
     def forward(self, x):
@@ -242,7 +234,6 @@ class Separator(nn.Module):
         out = self.merge_feature(out, gap)  # [B*C, N, K, S]  -> [B*C, N, I]
 
         # FFW + ReLU
-        # out = self.output(out) * self.output_gate(out)
         out = self.FeedForward1(out.permute(0, 2, 1))
         out = self.FeedForward2(out).permute(0, 2, 1)
         out = self.ReLU(out)
@@ -318,8 +309,8 @@ class Sepformer(nn.Module):
 
         super(Sepformer, self).__init__()
 
-        self.C = C  # 分离源的数量
         self.N = N  # 编码器输出通道
+        self.C = C  # 分离源的数量
         self.L = L  # 编码器卷积核大小
         self.H = H  # 注意头数量
         self.K = K  # 分块大小
