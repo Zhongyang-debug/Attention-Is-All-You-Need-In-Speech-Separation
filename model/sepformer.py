@@ -161,9 +161,9 @@ class DPTBlock(nn.Module):
         row_z1 = row_z + self.intra_PositionalEncoding(row_z)
 
         for i in range(self.Local_B):
-            row_z3 = self.intra_transformer[i](row_z1.permute(1, 0, 2)).permute(1, 0, 2)
+            row_z1 = self.intra_transformer[i](row_z1.permute(1, 0, 2)).permute(1, 0, 2)
 
-        row_f = row_z3 + row_z
+        row_f = row_z1 + row_z
         row_output = row_f.reshape(B, P, K, N).permute(0, 3, 2, 1)
 
         # inter DPT
@@ -171,9 +171,9 @@ class DPTBlock(nn.Module):
         col_z1 = col_z + self.inter_PositionalEncoding(col_z)
 
         for i in range(self.Local_B):
-            col_z3 = self.inter_transformer[i](col_z1.permute(1, 0, 2)).permute(1, 0, 2)
+            col_z1 = self.inter_transformer[i](col_z1.permute(1, 0, 2)).permute(1, 0, 2)
 
-        col_f = col_z3 + col_z
+        col_f = col_z1 + col_z
         col_output = col_f.reshape(B, K, P, N).permute(0, 3, 1, 2)
 
         return col_output
