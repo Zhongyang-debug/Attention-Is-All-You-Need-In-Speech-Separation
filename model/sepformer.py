@@ -421,7 +421,7 @@ if __name__ == "__main__":
 
     model = Sepformer(N=256,
                       C=2,
-                      L=16,
+                      L=2,
                       H=8,
                       K=250,
                       Global_B=2,
