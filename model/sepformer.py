@@ -105,8 +105,6 @@ class TransformerEncoderLayer(Module):
         return z3
 
 
-
-
 class Positional_Encoding(nn.Module):
     """
         Implement the positional encoding (PE) function.
