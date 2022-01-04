@@ -143,14 +143,14 @@ class DPTBlock(nn.Module):
 
         self.Local_B = Local_B
 
-        self.intra_PositionalEncoding = Positional_Encoding(d_model=input_size, dropout=0, max_len=5000)
+        self.intra_PositionalEncoding = Positional_Encoding(d_model=input_size, max_len=5000)
         self.intra_transformer = nn.ModuleList([])
         for i in range(self.Local_B):
             self.intra_transformer.append(TransformerEncoderLayer(d_model=input_size,
                                                                   nhead=nHead,
                                                                   dropout=0))
 
-        self.inter_PositionalEncoding = Positional_Encoding(d_model=input_size, dropout=0, max_len=5000)
+        self.inter_PositionalEncoding = Positional_Encoding(d_model=input_size, max_len=5000)
         self.inter_transformer = nn.ModuleList([])
         for i in range(self.Local_B):
             self.inter_transformer.append(TransformerEncoderLayer(d_model=input_size,
