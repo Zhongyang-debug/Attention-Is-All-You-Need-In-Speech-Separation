@@ -4,11 +4,17 @@ from torch.nn.modules.activation import MultiheadAttention
 from torch.nn.modules.module import Module
 from torch.autograd import Variable
 import math
+import torch.nn.functional as F
 
 
 class Encoder(nn.Module):
 
     def __init__(self, L, N):
+
+        """
+            学习类似STFT的表示。
+            卷积的步幅因子对模型的性能、速度和内存有显著的影响。
+        """
 
         super(Encoder, self).__init__()
 
@@ -88,51 +94,65 @@ class TransformerEncoderLayer(Module):
 
         self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout)
 
+        self.Dropout1 = nn.Dropout(p=dropout)
+
         self.LayerNorm2 = nn.LayerNorm(normalized_shape=d_model)
 
         self.FeedForward = nn.Sequential(nn.Linear(d_model, d_model*2*2),
                                          nn.ReLU(),
+                                         nn.Dropout(p=dropout),
                                          nn.Linear(d_model*2*2, d_model))
 
-    def forward(self, z1):
+        self.Dropout2 = nn.Dropout(p=dropout)
 
-        ln_z1 = self.LayerNorm1(z1)
+    def forward(self, z):
 
-        z2 = self.self_attn(ln_z1, ln_z1, ln_z1, attn_mask=None, key_padding_mask=None)[0]
+        z1 = self.LayerNorm1(z)
 
-        z3 = self.FeedForward(self.LayerNorm2(z2 + z1)) + z2 + z1
+        z2 = self.self_attn(z1, z1, z1, attn_mask=None, key_padding_mask=None)[0]
 
-        return z3
+        z3 = self.Dropout1(z2) + z
+
+        z4 = self.LayerNorm2(z3)
+
+        z5 = self.Dropout2(self.FeedForward(z4)) + z3
+
+        return z5
 
 
 class Positional_Encoding(nn.Module):
-    """
-        Implement the positional encoding (PE) function.
-        PE(pos, 2i)   = sin(pos/(10000^(2i/dmodel)))
-        PE(pos, 2i+1) = cos(pos/(10000^(2i/dmodel)))
-    """
 
-    def __init__(self, d_model, max_len=5000):
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
 
         super(Positional_Encoding, self).__init__()
 
-        # Compute the positional encodings once in log space.
-        pe = torch.zeros(max_len, d_model, requires_grad=False)
-        position = torch.arange(0, max_len).unsqueeze(1).float()
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model))
+        self.dropout = nn.Dropout(p=dropout)
+
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0)
+        # pe = pe.unsqueeze(0).transpose(0, 1)  # seq_len, batch, channels
+        pe = pe.transpose(0, 1).unsqueeze(0)  # batch, channels, seq_len
+
         self.register_buffer('pe', pe)
 
-    def forward(self, input):
-        """
-            Args:
-                input: N x T x D
-        """
-        length = input.size(1)
+    def forward(self, x):
 
-        return self.pe[:, :length]
+        x = x.permute(0, 2, 1).contiguous()
+
+        # x is seq_len, batch, channels
+        # x = x + self.pe[:x.size(0), :]
+
+        # x is batch, channels, seq_len
+        x = x + self.pe[:, :, :x.size(2)]
+
+        x = self.dropout(x)
+
+        x = x.permute(0, 2, 1).contiguous()
+
+        return x
 
 
 class DPTBlock(nn.Module):
@@ -143,43 +163,43 @@ class DPTBlock(nn.Module):
 
         self.Local_B = Local_B
 
-        self.intra_PositionalEncoding = Positional_Encoding(d_model=input_size, max_len=5000)
+        self.intra_PositionalEncoding = Positional_Encoding(d_model=input_size, max_len=32000)
         self.intra_transformer = nn.ModuleList([])
         for i in range(self.Local_B):
             self.intra_transformer.append(TransformerEncoderLayer(d_model=input_size,
                                                                   nhead=nHead,
-                                                                  dropout=0))
+                                                                  dropout=0.1))
 
-        self.inter_PositionalEncoding = Positional_Encoding(d_model=input_size, max_len=5000)
+        self.inter_PositionalEncoding = Positional_Encoding(d_model=input_size, max_len=32000)
         self.inter_transformer = nn.ModuleList([])
         for i in range(self.Local_B):
             self.inter_transformer.append(TransformerEncoderLayer(d_model=input_size,
                                                                   nhead=nHead,
-                                                                  dropout=0))
+                                                                  dropout=0.1))
 
     def forward(self, z):
 
-        B, N, K, P = z.shape  # torch.Size([1, 64, 250, 130])
+        B, N, K, P = z.shape
 
         # intra DPT
-        row_z = z.permute(0, 3, 2, 1).reshape(B*P, K, N)
-        row_z1 = row_z + self.intra_PositionalEncoding(row_z)
+        row_z = z.permute(0, 3, 2, 1).contiguous().view(B*P, K, N)
+        row_z1 = self.intra_PositionalEncoding(row_z)
 
         for i in range(self.Local_B):
-            row_z1 = self.intra_transformer[i](row_z1.permute(1, 0, 2)).permute(1, 0, 2)
+            row_z1 = self.intra_transformer[i](row_z1.permute(1, 0, 2).contiguous()).permute(1, 0, 2).contiguous()
 
         row_f = row_z1 + row_z
-        row_output = row_f.reshape(B, P, K, N).permute(0, 3, 2, 1)
+        row_output = row_f.view(B, P, K, N).permute(0, 3, 2, 1).contiguous()
 
         # inter DPT
-        col_z = row_output.permute(0, 2, 3, 1).reshape(B*K, P, N)
-        col_z1 = col_z + self.inter_PositionalEncoding(col_z)
+        col_z = row_output.permute(0, 2, 3, 1).contiguous().view(B*K, P, N)
+        col_z1 = self.inter_PositionalEncoding(col_z)
 
         for i in range(self.Local_B):
-            col_z1 = self.inter_transformer[i](col_z1.permute(1, 0, 2)).permute(1, 0, 2)
+            col_z1 = self.inter_transformer[i](col_z1.permute(1, 0, 2).contiguous()).permute(1, 0, 2).contiguous()
 
         col_f = col_z1 + col_z
-        col_output = col_f.reshape(B, K, P, N).permute(0, 3, 1, 2)
+        col_output = col_f.view(B, K, P, N).permute(0, 3, 1, 2).contiguous()
 
         return col_output
 
@@ -196,51 +216,41 @@ class Separator(nn.Module):
         self.Global_B = Global_B  # 全局循环次数
         self.Local_B = Local_B  # 局部循环次数
 
-        self.DPT = nn.ModuleList([])
-        for i in range(self.Global_B):
-            self.DPT.append(DPTBlock(N, H, self.Local_B))
-
         self.LayerNorm = nn.LayerNorm(self.N)
         self.Linear1 = nn.Linear(in_features=self.N, out_features=self.N, bias=None)
 
-        self.PReLU = nn.PReLU()
-        self.Linear2 = nn.Linear(in_features=self.N, out_features=self.N*2, bias=None)
+        self.SepFormer = nn.ModuleList([])
+        for i in range(self.Global_B):
+            self.SepFormer.append(DPTBlock(N, H, self.Local_B))
 
-        self.FeedForward1 = nn.Sequential(nn.Linear(self.N, self.N*2*2),
-                                          nn.ReLU(),
-                                          nn.Linear(self.N*2*2, self.N))
-        self.FeedForward2 = nn.Sequential(nn.Linear(self.N, self.N*2*2),
-                                          nn.ReLU(),
-                                          nn.Linear(self.N*2*2, self.N))
-        self.ReLU = nn.ReLU()
+        self.PReLU = nn.PReLU()
+        self.Conv2d = nn.Conv2d(N, N*C, kernel_size=1)
+
+        self.output = nn.Sequential(nn.Conv1d(N, N, 1), nn.Tanh())
+        self.output_gate = nn.Sequential(nn.Conv1d(N, N, 1), nn.Sigmoid())
 
     def forward(self, x):
+
         # Norm + Linear
-        x = self.LayerNorm(x.permute(0, 2, 1))
-        x = self.Linear1(x).permute(0, 2, 1)
+        x = self.LayerNorm(x.permute(0, 2, 1).contiguous())  # [B, C, L] => [B, L, C]
+        x = self.Linear1(x).permute(0, 2, 1).contiguous()  # [B, L, C] => [B, C, L]
 
         # Chunking
-        out, gap = self.split_feature(x, self.K)  # 分块，[B, N, I] -> [B, N, K, S]
+        out, gap = self.split_feature(x, self.K)  # [B, C, L] => [B, C, K, S]
 
         # SepFormer
         for i in range(self.Global_B):
-            out = self.DPT[i](out)  # [B, N, K, S] -> [B, N, K, S]
+            out = self.SepFormer[i](out)  # [B, C, K, S]
 
-        # PReLU + Linear
-        out = self.PReLU(out)
-        out = self.Linear2(out.permute(0, 3, 2, 1)).permute(0, 3, 2, 1)
+        out = self.Conv2d(self.PReLU(out))  # [B, N, K, S] -> [B, N*C, K, S], torch.Size([1, 128, 250, 130])
 
         B, _, K, S = out.shape
+        out = out.view(B, -1, self.C, K, S).permute(0, 2, 1, 3, 4).contiguous()  # [B, N*C, K, S] -> [B, N, C, K, S]
+        out = out.view(B*self.C, -1, K, S)
+        out = self.merge_feature(out, gap)  # [B*C, N, K, S]  -> [B*C, N, L]
 
-        # OverlapAdd
-        out = out.reshape(B, -1, self.C, K, S).permute(0, 2, 1, 3, 4)  # [B, N*C, K, S] -> [B, N, C, K, S]
-        out = out.reshape(B * self.C, -1, K, S)
-        out = self.merge_feature(out, gap)  # [B*C, N, K, S]  -> [B*C, N, I]
-
-        # FFW + ReLU
-        out = self.FeedForward1(out.permute(0, 2, 1))
-        out = self.FeedForward2(out).permute(0, 2, 1)
-        out = self.ReLU(out)
+        out = F.relu(self.output(out)*self.output_gate(out))
+        out = F.relu(out)
 
         return out
 
@@ -274,9 +284,9 @@ class Separator(nn.Module):
 
         segments1 = input[:, :, :-segment_stride].contiguous().view(batch_size, dim, -1, segment_size)
         segments2 = input[:, :, segment_stride:].contiguous().view(batch_size, dim, -1, segment_size)
-        segments = torch.cat([segments1, segments2], 3).view(batch_size, dim, -1, segment_size).transpose(2, 3)
+        segments = torch.cat([segments1, segments2], 3).view(batch_size, dim, -1, segment_size).transpose(2, 3).contiguous()
 
-        return segments.contiguous(), rest
+        return segments, rest
 
     def merge_feature(self, input, rest):
 
@@ -372,7 +382,7 @@ class Sepformer(nn.Module):
             pad = Variable(torch.zeros(batch_size, 1, rest)).type(input.type())
             input = torch.cat([input, pad], dim=2)
 
-        pad_aux = Variable(torch.zeros(batch_size, 1, self.L // 2)).type(input.type())
+        pad_aux = Variable(torch.zeros(batch_size, 1, self.L//2)).type(input.type())
 
         input = torch.cat([pad_aux, input, pad_aux], 2)
 
@@ -424,13 +434,13 @@ if __name__ == "__main__":
 
     x = torch.rand(1, 32000)
 
-    model = Sepformer(N=256,
+    model = Sepformer(N=128,
                       C=2,
                       L=2,
                       H=8,
                       K=250,
-                      Global_B=2,
-                      Local_B=8)
+                      Global_B=1,
+                      Local_B=1)
 
     print("{:.3f} million".format(sum([param.nelement() for param in model.parameters()]) / 1e6))
 
