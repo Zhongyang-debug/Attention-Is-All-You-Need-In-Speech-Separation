@@ -2,7 +2,7 @@
 
 Attention Is All You Need In Speech Separation
 
-Download address：https://arxiv.org/abs/2010.13154
+论文下载地址：https://arxiv.org/abs/2010.13154
 
 第一步，运行 perprocess.py 读取数据地址; ./config/train/train.json 设置参数；
  
